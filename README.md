@@ -39,7 +39,7 @@ Roadmap
 
 • [x] Project setup
 • [x] AWS connection test
-• [ ] Security group creation
+• [x] Security group creation
 • [ ] Key pair management
 • [ ] Instance launch
 • [ ] Security hardening
