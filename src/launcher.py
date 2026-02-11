@@ -42,8 +42,36 @@ class EC2Launcher:
 
     def create_security_group(self, name, description):
         """Create security group with SSH access from current IP only"""
-        print("create_security_group to be implemented")
-        pass
+        response = ec2.create_security_group(
+            GroupName='web-server-sg',
+            Description='Web server with SSH, HTTP, HTTPS'
+            )
+
+        sg_id = response['GroupId']
+
+        ec2.authorize_security_group_ingress(
+            GroupId=sg_id,
+            IpPermissions=[
+                {
+                    'IpProtocol': 'tcp',
+                    'FromPort': 22,
+                    'ToPort': 22,
+                    'IpRanges': [{'CidrIp': f'{my_ip}/32'}]
+                },
+                {
+                    'IpProtocol': 'tcp',
+                    'FromPort': 80,
+                    'ToPort': 80,
+                    'IpRanges':[{'CidrIp': '0.0.0.0/0'}]
+                },
+                {
+                    'IpProtocol': 'tcp',
+                    'FromPort': 443,
+                    'ToPort': 443,
+                    'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
+                }
+            ]
+        )
 
     def create_key_pair(self, key_name):
         """"Create and save SSH Key pair"""
