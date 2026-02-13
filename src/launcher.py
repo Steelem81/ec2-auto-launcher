@@ -75,8 +75,28 @@ class EC2Launcher:
 
     def create_key_pair(self, key_name):
         """"Create and save SSH Key pair"""
-        print("create_key_pair to be implemented")
-        pass
+        try:
+            #create the key pair
+            response = self.ec2_client.create_key_pair(KeyName=key_name)
+
+            #extract private key material
+            private_kay = response['KeyMaterial']
+
+            #save to file
+            key_path = f'keys/{key_name}.pem'
+            os.makdirs('keys', exist_ok=True)
+
+            with open(key_path, 'w') as f:
+                f.write(private_key)
+
+            #set file permissions(0400=read-only by owner)
+            os.chmod(key_path, 0o400)
+
+            print("Key pair created")
+            return key_path
+
+        except Exception as e:
+            print(f"Error creating key pair: {e}")
 
     def launch_instance(self, instance_type='t2.micro', ami_id=None):
         """Launch EC2 instance with security hardening"""
