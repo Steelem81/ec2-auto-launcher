@@ -17,8 +17,7 @@ Launch secure EC2 instances with one command:
 ## Installation
 
 ```bash
-pip install -r 
-requirements.txt
+pip install -r requirements.txt
 ```
 
 Setup
@@ -40,8 +39,8 @@ Roadmap
 • [x] Project setup
 • [x] AWS connection test
 • [x] Security group creation
-• [ ] Key pair management
-• [ ] Instance launch
+• [x] Key pair management
+• [x] Instance launch
 • [ ] Security hardening
 • [ ] Cost optimization features
 Tech Stack

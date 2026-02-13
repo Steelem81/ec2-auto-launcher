@@ -84,7 +84,7 @@ class EC2Launcher:
 
             #save to file
             key_path = f'keys/{key_name}.pem'
-            os.makdirs('keys', exist_ok=True)
+            os.mkdirs('keys', exist_ok=True)
 
             with open(key_path, 'w') as f:
                 f.write(private_key)
@@ -98,15 +98,90 @@ class EC2Launcher:
         except Exception as e:
             print(f"Error creating key pair: {e}")
 
-    def launch_instance(self, instance_type='t2.micro', ami_id=None):
+    def launch_instance(self, instance_type='t2.micro', ami_id=None, key_name=None, security_group_id=None):
         """Launch EC2 instance with security hardening"""
-        print("launch_instance to be implemented")
-        pass
+        #Default to Amazon Linux 2 if no AMI specified
+        if ami_id is None:
+            ami_id = 'ami-0c55b159cbfafe1f0'
+
+        try:
+            response = self.ec2_client.run_isntances(
+                ImageId=ami_id,
+                InstanceType=instance_type,
+                KeyName=key_name,
+                SecurityGroupIds=[security_group_id],
+                MinCount=1,
+                MaxCount=1,
+                TagSpecifications=[{
+                    'ResourceType': 'instance',
+                    'Tags': [
+                        {'Key': 'Name', 'Value': 'auto-launched-instance'},
+                        {'Key': 'ManagedBy', 'Value': 'EC2-Auto_Launcher'}
+                    ]
+                }]
+            )
+
+            instance_id = response['Instances'][0]['InstanceId']
+            print(f'Instance Launced: {instance_id}')
+
+            #Wait for instance to be running
+            print("Waiting for instance to start...")
+            waiter = self.ec2_client.get_waiter('instance_running')
+            waiter.wait(InstanceIds=[instance_id])
+
+            #Get public IP
+            instance_info = self.ec2_client.describe_instances(
+                InstanceIds=[instance_id]
+            )
+            public_ip = instance_info['Reservations'][0]['Instances'][0].get('PublicIpAddress')
+
+            print(f'Instance running at: {public_ip}')
+            return instance_id, public_ip
+        
+        except Exception as e:
+            print(f'Failure to lanch: {e}')
 
     def main():
         print("="*50)
         print("EC2 Auto Launcher")
         print("="*50)
+
+        launcher = EC2Launcher
+
+        #Test Connection
+        if not launcher.test_connection():
+            print("AWS connection failed")
+            return
+
+        #Get your IP
+        my_ip = launcher.get_my_ip()
+        if not my_ip:
+            print("Count not determine IP")
+            return
+        
+        #Create security group
+        sg_id = launcher.create_scurity_group(
+            name='auto-launcer-sg',
+            description='Auto-generated security group'
+        )
+
+        #Create ey pair
+        key_path = launcher.create_key_pair('auto-launcher-key')
+
+        #Launch instance
+        instance_id, public_ip = launcher.launch_instance(
+            key_name='auto-launcher-key',
+            security_group_id=sg_id
+        )
+
+        #show connection info
+        if instance_id:
+            print("\n"+"="*50)
+            print("Succes!")
+            print(f"Instance_id: {instance_id}")
+            print(f"Public IP: {public_ip}")
+            print(f"SSH Command: ssh -i {key_path} ec2-user@{public_ip}")
+            print("="*50)
 
 if __name__ == "__main__":
     main()
