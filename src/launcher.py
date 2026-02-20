@@ -98,36 +98,57 @@ class EC2Launcher:
             print(f"Error with security group: {e}")
             return None
 
-    def create_key_pair(self, key_name):
+    def get_or_create_key_pair(self, key_name):
         """"Create and save SSH Key pair"""
+
+        key_path = f'keys/{key_name}.pem'
+
         try:
-            #create the key pair
-            response = self.ec2_client.create_key_pair(KeyName=key_name)
+            #check if key pair exists
+            response = self.ec2_client.describe_key_pairs(
+                KeyNames=[key_name]
+            )
+            print(f"Key pair exists in AWS")
 
-            #extract private key material
-            private_kay = response['KeyMaterial']
+            # check if .pem file exists locally
+            if os.path.exists(key_path):
+                print("Local key file found")
+                return key_path
+            else:
+                print(f"Key exists in AWS but not locally")
+                return None
+        except self.ec2_client.exceptions.ClientError as e:
+            if 'InvalidKeyPair.NotFound' in str(e):
+                #key doesn't exist - create the key pair
+                print(f"Creating new key pair: {key_name}")
 
-            #save to file
-            key_path = f'keys/{key_name}.pem'
-            os.mkdirs('keys', exist_ok=True)
+                response = self.ec2_client.create_key_pair(KeyName=key_name)
 
-            with open(key_path, 'w') as f:
-                f.write(private_key)
+                #extract private key material
+                private_key = response['KeyMaterial']
 
-            #set file permissions(0400=read-only by owner)
-            os.chmod(key_path, 0o400)
+                #save to file
+                os.makedirs('keys', exist_ok=True)
+                with open(key_path, 'w') as f:
+                    f.write(private_key)
 
-            print("Key pair created")
-            return key_path
+                #set file permissions(0400=read-only by owner)
+                os.chmod(key_path, 0o400)
+
+                print("Key pair created")
+                return key_path
+            else:
+                print(f"Erorr checking key pair: {e}")
 
         except Exception as e:
             print(f"Error creating key pair: {e}")
+            return None
 
     def launch_instance(self, instance_type='t2.micro', ami_id=None, key_name=None, security_group_id=None):
         """Launch EC2 instance with security hardening"""
         #Default to Amazon Linux 2 if no AMI specified
         if ami_id is None:
-            ami_id = 'ami-0c55b159cbfafe1f0'
+            ami_id = 'ami-075b5421f670d735c'
 
         try:
             response = self.ec2_client.run_instances(
@@ -164,7 +185,7 @@ class EC2Launcher:
             return instance_id, public_ip
         
         except Exception as e:
-            print(f'Failure to lanch: {e}')
+            print(f'Failure to launch: {e}')
 
     def cleanup_resources(self, sg_name, key_name):
         """Delete test resources"""
@@ -228,8 +249,11 @@ def main(cleanup):
         ip=my_ip
     )
 
-    #Create ey pair
-    key_path = launcher.create_key_pair('auto-launcher-key')
+    #Create key pair
+    key_path = launcher.get_or_create_key_pair('auto-launcher-key')
+    if not key_path:
+        print("Could not determine key or key path")
+        return
 
     #Launch instance
     instance_id, public_ip = launcher.launch_instance(
