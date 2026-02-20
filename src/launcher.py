@@ -42,38 +42,59 @@ class EC2Launcher:
             print(f"Failed to get ip: {e}")
             return None
 
-    def create_security_group(self, name, description):
-        """Create security group with SSH access from current IP only"""
-        response = ec2.create_security_group(
-            GroupName='web-server-sg',
-            Description='Web server with SSH, HTTP, HTTPS'
+    def get_or_create_security_group(self, name, description, ip):
+        """Get existing security group or create a new one"""
+        try:
+            response = self.ec2_client.describe_security_groups(
+                Filters=[
+                    {'Name': 'group-name', 'Values': [name]}
+                ]
             )
 
-        sg_id = response['GroupId']
+            if response['SecurityGroups']:
+                sg_id = response['SecurityGroups'][0]['GroupId']
+                print(f"using existing security group: {sg_id}")
+                return sg_id
+        
+            # Create security group with SSH access from current IP only
+            print(f"Creating new security group: {name}")
+            response = self.ec2_client.create_security_group(
+                GroupName=name,
+                Description=description
+                )
 
-        ec2.authorize_security_group_ingress(
-            GroupId=sg_id,
-            IpPermissions=[
-                {
-                    'IpProtocol': 'tcp',
-                    'FromPort': 22,
-                    'ToPort': 22,
-                    'IpRanges': [{'CidrIp': f'{my_ip}/32'}]
-                },
-                {
-                    'IpProtocol': 'tcp',
-                    'FromPort': 80,
-                    'ToPort': 80,
-                    'IpRanges':[{'CidrIp': '0.0.0.0/0'}]
-                },
-                {
-                    'IpProtocol': 'tcp',
-                    'FromPort': 443,
-                    'ToPort': 443,
-                    'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
-                }
-            ]
-        )
+            sg_id = response['GroupId']
+
+            # Add rules
+            self.ec2_client.authorize_security_group_ingress(
+                GroupId=sg_id,
+                IpPermissions=[
+                    {
+                        'IpProtocol': 'tcp',
+                        'FromPort': 22,
+                        'ToPort': 22,
+                        'IpRanges': [{'CidrIp': f'{ip}/32'}]
+                    },
+                    {
+                        'IpProtocol': 'tcp',
+                        'FromPort': 80,
+                        'ToPort': 80,
+                        'IpRanges':[{'CidrIp': '0.0.0.0/0'}]
+                    },
+                    {
+                        'IpProtocol': 'tcp',
+                        'FromPort': 443,
+                        'ToPort': 443,
+                        'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
+                    }
+                ]
+            )
+
+            return sg_id
+
+        except Exception as e:
+            print(f"Error with security group: {e}")
+            return None
 
     def create_key_pair(self, key_name):
         """"Create and save SSH Key pair"""
@@ -107,7 +128,7 @@ class EC2Launcher:
             ami_id = 'ami-0c55b159cbfafe1f0'
 
         try:
-            response = self.ec2_client.run_isntances(
+            response = self.ec2_client.run_instances(
                 ImageId=ami_id,
                 InstanceType=instance_type,
                 KeyName=key_name,
@@ -150,47 +171,41 @@ def main():
 
     launcher = EC2Launcher()
 
-    if launcher.test_connection():
-        print("Setup successful")
-    else:
-        print("Setupfailed. Check AWS credentials.")
+    #Test Connection
+    if not launcher.test_connection():
+        print("AWS connection failed")
+        return
 
-        launcher = EC2Launcher
+    #Get your IP
+    my_ip = launcher.get_my_ip()
+    if not my_ip:
+        print("Count not determine IP")
+        return
+    
+    #Create security group
+    sg_id = launcher.get_or_create_security_group(
+        name='auto-launcher-sg',
+        description='Auto-generated security group',
+        ip=my_ip
+    )
 
-        #Test Connection
-        if not launcher.test_connection():
-            print("AWS connection failed")
-            return
+    #Create ey pair
+    key_path = launcher.create_key_pair('auto-launcher-key')
 
-        #Get your IP
-        my_ip = launcher.get_my_ip()
-        if not my_ip:
-            print("Count not determine IP")
-            return
-        
-        #Create security group
-        sg_id = launcher.create_scurity_group(
-            name='auto-launcer-sg',
-            description='Auto-generated security group'
-        )
+    #Launch instance
+    instance_id, public_ip = launcher.launch_instance(
+        key_name='auto-launcher-key',
+        security_group_id=sg_id
+    )
 
-        #Create ey pair
-        key_path = launcher.create_key_pair('auto-launcher-key')
-
-        #Launch instance
-        instance_id, public_ip = launcher.launch_instance(
-            key_name='auto-launcher-key',
-            security_group_id=sg_id
-        )
-
-        #show connection info
-        if instance_id:
-            print("\n"+"="*50)
-            print("Succes!")
-            print(f"Instance_id: {instance_id}")
-            print(f"Public IP: {public_ip}")
-            print(f"SSH Command: ssh -i {key_path} ec2-user@{public_ip}")
-            print("="*50)
+    #show connection info
+    if instance_id:
+        print("\n"+"="*50)
+        print("Succes!")
+        print(f"Instance_id: {instance_id}")
+        print(f"Public IP: {public_ip}")
+        print(f"SSH Command: ssh -i {key_path} ec2-user@{public_ip}")
+        print("="*50)
 
 if __name__ == "__main__":
     main()
