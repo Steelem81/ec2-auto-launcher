@@ -1,7 +1,9 @@
 import boto3
 import os
 import requests
+import click
 from dotenv import load_dotenv
+
 
 load_dotenv()
 
@@ -164,12 +166,49 @@ class EC2Launcher:
         except Exception as e:
             print(f'Failure to lanch: {e}')
 
-def main():
+    def cleanup_resources(self, sg_name, key_name):
+        """Delete test resources"""
+        print("Cleanup mode - deleting resources")
+
+        if sg_name:
+            try:
+                response = self.ec2_client.describe_security_groups(
+                    Filters=[{'Name': 'group-name', 'Values': [sg_name]}]
+                )
+                if response['SecurityGroups']:
+                    sg_id = response['SecurityGroups'][0]['GroupId']
+                    self.ec2_client.delete_security_group(GroupId=sg_id)
+                    print(f"Deleted security group: {sg_name}")
+            except Exception as e:
+                print(f"Error deleting {e}")
+
+        # Delete key path
+        if key_name:
+            try:
+                self.ec2_client.delete_key_pair(KeyName=key_name)
+                print(f"Deleted key pair: {key_name}")
+
+                # delete local path
+                key_path = f"keys/{key_name}.pem"
+                if os.path.exists(key_path):
+                    os.remove(key_path)
+                    print(f"Deleted local key: {key_path}")
+            except Exception as e:
+                print(f"Error deleting key: {e}")
+
+@click.command()
+@click.option('--cleanup', is_flag=True, help='Delete test resources')
+def main(cleanup):
     print("="*50)
     print("EC2 Auto Launcher")
     print("="*50)
 
     launcher = EC2Launcher()
+
+    #cleanup mode
+    if cleanup:
+        launcher.cleanup_resources(sg_name='auto-launcher-sg', key_name='auto-launcher-key')
+        return 
 
     #Test Connection
     if not launcher.test_connection():
@@ -206,6 +245,7 @@ def main():
         print(f"Public IP: {public_ip}")
         print(f"SSH Command: ssh -i {key_path} ec2-user@{public_ip}")
         print("="*50)
+
 
 if __name__ == "__main__":
     main()
