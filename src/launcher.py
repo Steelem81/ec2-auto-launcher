@@ -9,11 +9,13 @@ class EC2Launcher:
     """Main launcher of EC2 instances"""
 
     def __init__(self):
-        """Initialize AWS Clients"""
         self.region = os.getenv('AWS_REGION', 'us-west-2')
-
-        """Initial EC2 Client"""
-        self.ec2_client = boto3.client('ec2', region_name = self.region)
+        """Initialize AWS Clients"""
+        self.ec2_client=boto3.client('ec2',
+        region_name=self.region,
+        aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
+        )
         self.ec2_resource = boto3.resource('ec2', region_name = self.region)
 
         print(f"EC2 Launcher intitiated (Region: {self.region})")
@@ -23,7 +25,7 @@ class EC2Launcher:
         try:
             response = self.ec2_client.describe_instances()
             print("AWS connection successful")
-            print(f"Found {len(response['Rservations'])} reservations")
+            print(f"Found {len(response['Reservations'])} reservations")
             return True
         except Exception as e:
             print(f"AWS Connection failed: {e}")
@@ -141,10 +143,17 @@ class EC2Launcher:
         except Exception as e:
             print(f'Failure to lanch: {e}')
 
-    def main():
-        print("="*50)
-        print("EC2 Auto Launcher")
-        print("="*50)
+def main():
+    print("="*50)
+    print("EC2 Auto Launcher")
+    print("="*50)
+
+    launcher = EC2Launcher()
+
+    if launcher.test_connection():
+        print("Setup successful")
+    else:
+        print("Setupfailed. Check AWS credentials.")
 
         launcher = EC2Launcher
 
